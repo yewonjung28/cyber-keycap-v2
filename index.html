@@ -1,0 +1,211 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>KEYCAP / Press Test</title><style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden}body{background:#ffffff;color:#352e35;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}#app{position:fixed;inset:0;touch-action:none;cursor:pointer}header{position:absolute;top:32px;left:36px;z-index:2;font-weight:800;font-size:13px;letter-spacing:.13em;pointer-events:none}.badge{position:absolute;right:36px;top:32px;font-size:11px;color:#9d8795;z-index:2;pointer-events:none}footer{position:absolute;bottom:32px;left:0;width:100%;text-align:center;z-index:2;font-size:12px;letter-spacing:.08em;pointer-events:none}.dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#b77fa3;margin-right:8px;vertical-align:middle}canvas{display:block;width:100%;height:100%}#error{display:none;position:absolute;left:10%;right:10%;top:45%;text-align:center;z-index:4;line-height:1.7;font-size:14px} @media(max-width:600px){header{top:22px;left:20px}.badge{top:22px;right:20px}footer{bottom:24px}}
+</style></head><body><header>KEYCAP<span style="color:#bb8aa9">®</span></header><div class="badge">FOUR KEYS / 004</div><div id="app"></div><div id="error">모델을 불러오지 못했어요.<br>웹 서버에서 열거나 배포한 주소에서 확인해 주세요.</div><footer><span class="dot"></span>PRESS &amp; HOLD ANY KEY</footer>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {RGBELoader} from 'three/addons/loaders/RGBELoader.js';
+const host=document.getElementById('app');const scene=new THREE.Scene();scene.background=new THREE.Color('#ffffff');const camera=new THREE.PerspectiveCamera(95,innerWidth/innerHeight,.03,150);camera.position.set(-1.65,2.05,2.15);camera.lookAt(0,0.45,0);camera.zoom=2.65;camera.updateProjectionMatrix();
+const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.05;host.appendChild(renderer.domElement);
+// Middle-button drag, with Shift+left drag as a reliable Mac fallback.
+const orbitTarget=new THREE.Vector3();
+let orbitDrag=null;
+const orbitQuat=new THREE.Quaternion(),orbitOffset=new THREE.Vector3(),orbitRight=new THREE.Vector3();
+const orbitUp=new THREE.Vector3(0,1,0);
+const interactionStatus=document.createElement('div');
+interactionStatus.style.cssText='position:absolute;bottom:56px;left:0;right:0;text-align:center;font:11px ui-monospace,monospace;color:#8b8b8b;pointer-events:none;z-index:3';
+interactionStatus.textContent='MIDDLE DRAG TO ROTATE · SHIFT + DRAG ON MAC';
+host.appendChild(interactionStatus);
+function orbitStart(e){
+ const middle=e.button===1;
+ const fallback=e.button===0&&e.shiftKey;
+ if(!middle&&!fallback)return;
+ e.preventDefault();e.stopPropagation();
+ orbitDrag={id:e.pointerId,x:e.clientX,y:e.clientY};
+ interactionStatus.textContent='ROTATING · '+(middle?'MIDDLE BUTTON':'SHIFT + DRAG');
+ try{renderer.domElement.setPointerCapture(e.pointerId)}catch(err){console.warn(err)}
+}
+function orbitMove(e){
+ if(!orbitDrag||orbitDrag.id!==e.pointerId)return;
+ e.preventDefault();
+ const dx=e.clientX-orbitDrag.x,dy=e.clientY-orbitDrag.y;
+ orbitDrag.x=e.clientX;orbitDrag.y=e.clientY;
+ orbitOffset.copy(camera.position).sub(orbitTarget);
+ camera.updateMatrixWorld();
+ orbitRight.setFromMatrixColumn(camera.matrixWorld,0).normalize();
+ orbitQuat.setFromAxisAngle(orbitUp,-dx*.009);orbitOffset.applyQuaternion(orbitQuat);
+ orbitQuat.setFromAxisAngle(orbitRight,-dy*.009);orbitOffset.applyQuaternion(orbitQuat);
+ camera.position.copy(orbitTarget).add(orbitOffset);camera.lookAt(orbitTarget);
+ camera.updateMatrixWorld();
+}
+function orbitEnd(e){
+ if(!orbitDrag||e.pointerId!==orbitDrag.id)return;
+ orbitDrag=null;
+ interactionStatus.textContent='MIDDLE DRAG TO ROTATE · SHIFT + DRAG ON MAC';
+}
+renderer.domElement.addEventListener('pointerdown',orbitStart,true);
+window.addEventListener('pointermove',orbitMove,true);
+window.addEventListener('pointerup',orbitEnd,true);
+window.addEventListener('pointercancel',orbitEnd,true);
+renderer.domElement.addEventListener('auxclick',e=>{if(e.button===1)e.preventDefault()});
+renderer.domElement.addEventListener('contextmenu',e=>e.preventDefault());
+scene.add(new THREE.HemisphereLight('#ffffff','#a08d9c',.65));const light=new THREE.DirectionalLight('#ffffff',0.9);light.position.set(-3,7,5);light.castShadow=true;light.shadow.mapSize.set(2048,2048);light.shadow.camera.left=-6;light.shadow.camera.right=6;light.shadow.camera.top=6;light.shadow.camera.bottom=-6;light.shadow.bias=-.0003;light.shadow.radius=5;scene.add(light);
+new RGBELoader().load('./studio.hdr',texture=>{texture.mapping=THREE.EquirectangularReflectionMapping;scene.environment=texture;scene.environmentIntensity=0.9;document.querySelector('.badge').textContent='STUDIO HDRI LOADED / 005';},undefined,error=>(console.error('HDRI load failed:',error),document.querySelector('.badge').textContent='STUDIO HDRI ERROR / 005'));
+
+const rig=new THREE.Group();scene.add(rig);
+const keys=[];const ray=new THREE.Raycaster(),pointer=new THREE.Vector2();
+let activePointer=null;
+const glowColor=new THREE.Color('#ff8cde');
+let fitBounds=null;
+function fitCameraToKeys(){
+ if(!fitBounds)return;
+ const box=fitBounds,center=box.getCenter(new THREE.Vector3());
+ // Keep the exaggerated perspective direction but center the whole four-key set.
+ const viewDirection=new THREE.Vector3(-1.65,2.30,2.15);
+ camera.position.copy(center).add(viewDirection);
+ camera.lookAt(center);
+ camera.zoom=1;
+ camera.updateProjectionMatrix();camera.updateMatrixWorld();
+ const points=[];
+ for(const x of [box.min.x,box.max.x])for(const y of [box.min.y,box.max.y])for(const z of [box.min.z,box.max.z])points.push(new THREE.Vector3(x,y,z));
+ // Fit all projected corners into the requested inner frame (10%-90% width, 15%-85% height).
+ for(let pass=0;pass<3;pass++){
+  camera.updateMatrixWorld();camera.updateProjectionMatrix();
+  const projected=points.map(p=>p.clone().project(camera));
+  const minX=Math.min(...projected.map(p=>p.x)),maxX=Math.max(...projected.map(p=>p.x));
+  const minY=Math.min(...projected.map(p=>p.y)),maxY=Math.max(...projected.map(p=>p.y));
+  const midX=(minX+maxX)/2,midY=(minY+maxY)/2;
+  const distance=camera.position.distanceTo(center);
+  const visibleHeight=2*distance*Math.tan(THREE.MathUtils.degToRad(camera.fov)/2)/camera.zoom;
+  const right=new THREE.Vector3(1,0,0).applyQuaternion(camera.quaternion);
+  const up=new THREE.Vector3(0,1,0).applyQuaternion(camera.quaternion);
+  const shift=right.multiplyScalar(midX*visibleHeight*camera.aspect/2).add(up.multiplyScalar(midY*visibleHeight/2));
+  camera.position.add(shift);center.add(shift);camera.lookAt(center);
+  const zoomFactor=Math.min(1.58/Math.max(.001,maxX-minX),1.36/Math.max(.001,maxY-minY));
+  camera.zoom*=Math.min(zoomFactor,3);
+ }
+ camera.updateProjectionMatrix();
+ orbitTarget.copy(box.getCenter(new THREE.Vector3()));
+}
+
+new GLTFLoader().load('./Four_keycaps.glb',g=>{
+ const root=g.scene;rig.add(root);
+ const allBox=new THREE.Box3().setFromObject(root);
+ const size=allBox.getSize(new THREE.Vector3()),center=allBox.getCenter(new THREE.Vector3());
+ root.position.sub(center);
+ const scale=3.8/Math.max(size.x,size.z);
+ rig.scale.setScalar(scale);
+ rig.position.y=-allBox.min.y*scale+.08;
+ // Each key is independent; its base and light remain stationary.
+ for(let i=1;i<=4;i++){
+  const key=root.getObjectByName('Key'+i),base=root.getObjectByName('Base'+i),led=root.getObjectByName('Light'+i);
+  if(!key||!base||!led){console.warn('Missing components for key',i);continue}
+  const emissive=[];
+  key.traverse(o=>{if(!o.isMesh)return;o.castShadow=true;o.receiveShadow=true;
+   const original=Array.isArray(o.material)?o.material:[o.material];
+   const clones=original.map(m=>{const clone=m.clone();if(clone.name==='Material.005'){clone.color.set('#21e8b3');clone.metalness=0;clone.roughness=0.065;clone.envMapIntensity=1.3;clone.clearcoat=1;clone.clearcoatRoughness=0.025;clone.transmission=0;clone.needsUpdate=true;}if(['I','Lost','MY','CTRL'].includes(clone.name)){clone.color.set('#21e8b3');clone.roughness=0.11;clone.envMapIntensity=1.0;clone.clearcoat=1;clone.clearcoatRoughness=0.035;clone.transmission=0;if(clone.map){clone.onBeforeCompile=shader=>{shader.fragmentShader=shader.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\n totalEmissiveRadiance *= texture2D(map, vMapUv).a;');};clone.customProgramCacheKey=()=> 'legend-alpha-emission-v1';}clone.needsUpdate=true;}if(clone.emissive&&clone.emissiveIntensity>0){emissive.push({material:clone,intensity:clone.emissiveIntensity});clone.emissiveIntensity=0;}return clone});
+   o.material=Array.isArray(o.material)?clones:clones[0];
+  });
+  const leds=[];
+  led.traverse(o=>{if(o.isMesh){o.material=Array.isArray(o.material)?o.material.map(m=>m.clone()):o.material.clone();const materials=Array.isArray(o.material)?o.material:[o.material];for(const m of materials){if(m.emissive){leds.push({material:m,intensity:Math.max(m.emissiveIntensity||0,2)});m.emissiveIntensity=0}m.transparent=true;m.opacity=0;}o.visible=false;}});
+  led.visible=false;
+  // GLB inspection: Base1..4 are the ONLY support meshes (Material.002).
+  // Keep strong mint tint with glossy acrylic highlights and gentle refraction.
+  base.traverse(o=>{
+   if(!o.isMesh)return;
+   o.receiveShadow=true;o.castShadow=true;
+   const acrylic=()=>new THREE.MeshPhysicalMaterial({
+    color:'#21e8b3',metalness:0,roughness:0.065,
+    transmission:0.04,thickness:0.75,ior:1.48,
+    clearcoat:1,clearcoatRoughness:0.025,
+    emissive:'#21e8b3',emissiveIntensity:0.035,
+    envMapIntensity:1.3,side:THREE.FrontSide
+   });
+   o.material=Array.isArray(o.material)?o.material.map(acrylic):acrylic();
+  });
+  // LED light source exists in the web scene, independent of Blender light exports.
+  const bounds=new THREE.Box3().setFromObject(key),mid=bounds.getCenter(new THREE.Vector3());
+  const lamp=new THREE.PointLight(glowColor,0,Math.max(size.x,size.z)*.55,2);
+  lamp.position.set(mid.x,bounds.min.y-.015,mid.z);
+  root.add(lamp);
+  keys.push({key,led,lamp,emissive,leds,rest:key.position.y,press:0,target:0});
+ }
+ fitBounds=new THREE.Box3().setFromObject(rig);fitCameraToKeys();
+ document.querySelector('.badge').textContent='4 KEYS READY / 004';
+},undefined,e=>{console.error(e);document.getElementById('error').style.display='block'});
+function pick(e){
+ const r=renderer.domElement.getBoundingClientRect();
+ pointer.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);
+ ray.setFromCamera(pointer,camera);
+ const hits=ray.intersectObjects(keys.map(k=>k.key),true);
+ if(!hits.length)return null;
+ return keys.find(k=>{let o=hits[0].object;while(o){if(o===k.key)return true;o=o.parent;}return false})||null;
+}
+let held=null;
+// Play the user's recorded keycap sound; clone the audio for rapid repeated presses.
+const keycapSound=new Audio('./Keycap.mp3');
+keycapSound.preload='auto';
+keycapSound.volume=0.85;
+function playKeyClick(){
+ const sound=keycapSound.cloneNode();
+ sound.volume=keycapSound.volume;
+ sound.play().catch(err=>console.warn('Keycap sound unavailable:',err));
+}
+// Drag across keys to press them one after another while holding left mouse.
+function activateKey(k){
+ if(held===k)return;
+ if(held)held.target=0;
+ held=k;
+ if(k){k.target=1;playKeyClick();}
+}
+host.addEventListener('pointerdown',e=>{
+ if(e.button!==0||e.shiftKey||orbitDrag)return;
+ const k=pick(e);
+ if(!k)return;
+ activePointer=e.pointerId;
+ activateKey(k);
+ host.setPointerCapture(e.pointerId);
+});
+host.addEventListener('pointermove',e=>{
+ if(activePointer===null||e.pointerId!==activePointer||orbitDrag)return;
+ if((e.buttons&1)===0){release(e);return;}
+ // Passing through empty space releases the previous key; entering the next
+ // key plays its sound once and depresses it.
+ activateKey(pick(e));
+});
+function release(e){
+ if(activePointer===null||e.pointerId!==activePointer)return;
+ activateKey(null);
+ activePointer=null;
+}
+host.addEventListener('pointerup',release);
+host.addEventListener('pointercancel',release);
+host.addEventListener('lostpointercapture',release);
+window.addEventListener('blur',()=>{
+ for(const k of keys)k.target=0;
+ held=null;activePointer=null;orbitDrag=null;
+});
+
+function resize(){
+ const w=innerWidth,h=innerHeight;
+ camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h);fitCameraToKeys();
+}
+window.addEventListener('resize',resize);resize();
+let previous=performance.now();
+function frame(t){
+ const dt=Math.min((t-previous)/1000,.05);previous=t;
+ for(const k of keys){
+  k.press+=(k.target-k.press)*(1-Math.exp(-dt*(k.target?22:12)));
+  k.key.position.y=k.rest-k.press*.10;
+  const v=k.press;
+  k.led.visible=v>.015;
+  k.led.traverse(o=>{if(o.isMesh)o.visible=v>.015});
+  for(const m of k.leds){m.material.emissiveIntensity=m.intensity*v;m.material.opacity=v;}
+  for(const m of k.emissive)m.material.emissiveIntensity=m.intensity*v;
+  k.lamp.intensity=4*v;
+ }
+ renderer.render(scene,camera);requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script></body></html>
