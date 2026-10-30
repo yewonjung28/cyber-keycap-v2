@@ -139,7 +139,7 @@ new GLTFLoader().load('./Four_keycaps.glb',g=>{
  }
  fitBounds=new THREE.Box3().setFromObject(rig);fitCameraToKeys();rig.userData.baseY=rig.position.y;
  document.querySelector('.badge').textContent='4 KEYS READY / 004';
-},undefined,e=>{console.error(e);document.getElementById('error').style.display='block'});
+},undefined,e=>{console.error('First model load failed:',e);const el=document.getElementById('error');el.style.display='block';el.textContent='첫 번째 키캡을 불러오지 못했어요: '+(e?.message||e);});
 
 // The second keycap set is loaded independently; its own materials, lights and sound
 // remain separate from the original four keys.
@@ -170,7 +170,7 @@ new GLTFLoader().load('./Thereisnoesc.glb',g=>{
      const strength=Math.max(clone.emissiveIntensity||0,2);
      clone.emissive.set('#ffffff');clone.emissiveIntensity=0;
      if(clone.map){
-      clone.onBeforeCompile=shader=>{shader.fragmentShader=shader.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\\n totalEmissiveRadiance *= texture2D(map, vMapUv).a;');};
+      clone.onBeforeCompile=shader=>{shader.fragmentShader=shader.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\n totalEmissiveRadiance *= texture2D(map, vMapUv).a;');};
       clone.customProgramCacheKey=()=> 'second-legend-alpha-v1';
      }
      emissive.push({material:clone,intensity:strength});
@@ -199,7 +199,7 @@ new GLTFLoader().load('./Thereisnoesc.glb',g=>{
  secondReady=true;
  rig2.position.y=rig2.userData.baseY-2.8;
  rig2.visible=false;
-},undefined,e=>console.error('Second model load failed:',e));
+},undefined,e=>{console.error('Second model load failed:',e);document.querySelector('.badge').textContent='SECOND MODEL LOAD ERROR';});
 
 function pick(e){
  const r=renderer.domElement.getBoundingClientRect();
