@@ -54,6 +54,12 @@ scene.add(new THREE.HemisphereLight('#ffffff','#a08d9c',.65));const light=new TH
 new RGBELoader().load('./studio.hdr',texture=>{texture.mapping=THREE.EquirectangularReflectionMapping;scene.environment=texture;scene.environmentIntensity=0.9;document.querySelector('.badge').textContent='STUDIO HDRI LOADED / 005';},undefined,error=>(console.error('HDRI load failed:',error),document.querySelector('.badge').textContent='STUDIO HDRI ERROR / 005'));
 
 const rig=new THREE.Group();scene.add(rig);
+const rig2=new THREE.Group();scene.add(rig2);rig2.visible=false;
+let section=0,scrollProgress=0,scrollGoal=0,secondReady=false;
+const secondKeys=[];
+const secondSound=new Audio('./dragon-studio-pop-402324.mp3');secondSound.preload='auto';secondSound.volume=.9;
+const scrollHint=document.createElement('div');scrollHint.style.cssText='position:absolute;right:36px;bottom:32px;z-index:4;font:11px ui-monospace,monospace;letter-spacing:.08em;color:#a18c9b;pointer-events:none';scrollHint.textContent='SCROLL ↓ TO DISCOVER';document.body.appendChild(scrollHint);
+window.addEventListener('wheel',e=>{if(orbitDrag)return;e.preventDefault();scrollGoal=THREE.MathUtils.clamp(scrollGoal+e.deltaY*.0025,0,1);},{passive:false});
 const keys=[];const ray=new THREE.Raycaster(),pointer=new THREE.Vector2();
 let activePointer=null;
 const glowColor=new THREE.Color('#ff8cde');
@@ -131,16 +137,78 @@ new GLTFLoader().load('./Four_keycaps.glb',g=>{
   root.add(lamp);
   keys.push({key,led,lamp,emissive,leds,rest:key.position.y,press:0,target:0});
  }
- fitBounds=new THREE.Box3().setFromObject(rig);fitCameraToKeys();
+ fitBounds=new THREE.Box3().setFromObject(rig);fitCameraToKeys();rig.userData.baseY=rig.position.y;
  document.querySelector('.badge').textContent='4 KEYS READY / 004';
 },undefined,e=>{console.error(e);document.getElementById('error').style.display='block'});
+
+// The second keycap set is loaded independently; its own materials, lights and sound
+// remain separate from the original four keys.
+new GLTFLoader().load('./Thereisnoesc.glb',g=>{
+ const root=g.scene;rig2.add(root);
+ const allBox=new THREE.Box3().setFromObject(root);
+ const size=allBox.getSize(new THREE.Vector3()),center=allBox.getCenter(new THREE.Vector3());
+ root.position.sub(center);
+ const scale=3.8/Math.max(size.x,size.z);
+ rig2.scale.setScalar(scale);
+ rig2.position.y=-allBox.min.y*scale+.08;
+ rig2.userData.baseY=rig2.position.y;
+ const legends=['There','Is','No','esc'];
+ for(let i=1;i<=4;i++){
+  const key=root.getObjectByName('Key'+i),base=root.getObjectByName('Base'+i);
+  const led=root.getObjectByName('Light'+i)||root.getObjectByName('Light'+i+'_1');
+  if(!key||!base){console.warn('Second model missing key/base',i);continue;}
+  const emissive=[];
+  key.traverse(o=>{
+   if(!o.isMesh)return;
+   o.castShadow=true;o.receiveShadow=true;
+   const mats=Array.isArray(o.material)?o.material:[o.material];
+   const copies=mats.map(m=>{
+    const clone=m.clone();
+    if(clone.color){clone.roughness=.085;clone.metalness=0;clone.envMapIntensity=1.25;
+     if('clearcoat' in clone){clone.clearcoat=1;clone.clearcoatRoughness=.035;}}
+    if(clone.emissive&& (legends.some(n=>clone.name.toLowerCase()===n.toLowerCase())||clone.map)){
+     const strength=Math.max(clone.emissiveIntensity||0,2);
+     clone.emissive.set('#ffffff');clone.emissiveIntensity=0;
+     if(clone.map){
+      clone.onBeforeCompile=shader=>{shader.fragmentShader=shader.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\\n totalEmissiveRadiance *= texture2D(map, vMapUv).a;');};
+      clone.customProgramCacheKey=()=> 'second-legend-alpha-v1';
+     }
+     emissive.push({material:clone,intensity:strength});
+    }
+    clone.needsUpdate=true;return clone;
+   });
+   o.material=Array.isArray(o.material)?copies:copies[0];
+  });
+  base.traverse(o=>{if(!o.isMesh)return;o.castShadow=true;o.receiveShadow=true;
+   const mats=Array.isArray(o.material)?o.material:[o.material];
+   const copies=mats.map(m=>{const clone=m.clone();if('clearcoat' in clone){clone.clearcoat=1;clone.clearcoatRoughness=.025;clone.roughness=.065;clone.envMapIntensity=1.3;}return clone;});
+   o.material=Array.isArray(o.material)?copies:copies[0];
+  });
+  const leds=[];
+  if(led){led.traverse(o=>{if(!o.isMesh)return;
+   o.material=Array.isArray(o.material)?o.material.map(m=>m.clone()):o.material.clone();
+   const mats=Array.isArray(o.material)?o.material:[o.material];
+   for(const m of mats){leds.push({material:m,intensity:Math.max(m.emissiveIntensity||0,2)});m.emissiveIntensity=0;m.transparent=true;m.opacity=0;}
+   o.visible=false;
+  });led.visible=false;}
+  const bounds=new THREE.Box3().setFromObject(key),mid=bounds.getCenter(new THREE.Vector3());
+  const lamp=new THREE.PointLight('#ff8cde',0,Math.max(size.x,size.z)*.55,2);
+  lamp.position.set(mid.x,bounds.min.y-.015,mid.z);root.add(lamp);
+  secondKeys.push({key,led:led||new THREE.Group(),lamp,emissive,leds,rest:key.position.y,press:0,target:0});
+ }
+ secondReady=true;
+ rig2.position.y=rig2.userData.baseY-2.8;
+ rig2.visible=false;
+},undefined,e=>console.error('Second model load failed:',e));
+
 function pick(e){
  const r=renderer.domElement.getBoundingClientRect();
  pointer.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);
  ray.setFromCamera(pointer,camera);
- const hits=ray.intersectObjects(keys.map(k=>k.key),true);
+ const available=section===0?keys:secondKeys;
+ const hits=ray.intersectObjects(available.map(k=>k.key),true);
  if(!hits.length)return null;
- return keys.find(k=>{let o=hits[0].object;while(o){if(o===k.key)return true;o=o.parent;}return false})||null;
+ return available.find(k=>{let o=hits[0].object;while(o){if(o===k.key)return true;o=o.parent;}return false})||null;
 }
 let held=null;
 // Play the user's recorded keycap sound; clone the audio for rapid repeated presses.
@@ -148,8 +216,9 @@ const keycapSound=new Audio('./Keycap.mp3');
 keycapSound.preload='auto';
 keycapSound.volume=0.85;
 function playKeyClick(){
- const sound=keycapSound.cloneNode();
- sound.volume=keycapSound.volume;
+ const source=section===0?keycapSound:secondSound;
+ const sound=source.cloneNode();
+ sound.volume=source.volume;
  sound.play().catch(err=>console.warn('Keycap sound unavailable:',err));
 }
 // Drag across keys to press them one after another while holding left mouse.
@@ -161,6 +230,7 @@ function activateKey(k){
 }
 host.addEventListener('pointerdown',e=>{
  if(e.button!==0||e.shiftKey||orbitDrag)return;
+ if(scrollProgress>.15&&scrollProgress<.85)return;
  const k=pick(e);
  if(!k)return;
  activePointer=e.pointerId;
@@ -183,7 +253,7 @@ host.addEventListener('pointerup',release);
 host.addEventListener('pointercancel',release);
 host.addEventListener('lostpointercapture',release);
 window.addEventListener('blur',()=>{
- for(const k of keys)k.target=0;
+ for(const k of [...keys,...secondKeys])k.target=0;
  held=null;activePointer=null;orbitDrag=null;
 });
 
@@ -195,7 +265,16 @@ window.addEventListener('resize',resize);resize();
 let previous=performance.now();
 function frame(t){
  const dt=Math.min((t-previous)/1000,.05);previous=t;
- for(const k of keys){
+ scrollProgress+=(scrollGoal-scrollProgress)*(1-Math.exp(-dt*5));
+ section=scrollProgress<.5?0:1;
+ const t=THREE.MathUtils.smoothstep(scrollProgress,0,1);
+ if(rig.userData.baseY!==undefined)rig.position.y=rig.userData.baseY+2.8*t;
+ if(secondReady)rig2.position.y=rig2.userData.baseY-2.8*(1-t);
+ rig.visible=t<.98;rig2.visible=secondReady&&t>.02;
+ 
+ scrollHint.textContent=section===0?'SCROLL ↓ TO DISCOVER':'SCROLL ↑ TO RETURN';
+ document.querySelector('.badge').textContent=section===0?'4 KEYS READY / 001':'4 KEYS READY / 002';
+ for(const k of [...keys,...secondKeys]){
   k.press+=(k.target-k.press)*(1-Math.exp(-dt*(k.target?22:12)));
   k.key.position.y=k.rest-k.press*.10;
   const v=k.press;
