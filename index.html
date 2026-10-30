@@ -267,10 +267,10 @@ function frame(t){
  const dt=Math.min((t-previous)/1000,.05);previous=t;
  scrollProgress+=(scrollGoal-scrollProgress)*(1-Math.exp(-dt*5));
  section=scrollProgress<.5?0:1;
- const t=THREE.MathUtils.smoothstep(scrollProgress,0,1);
- if(rig.userData.baseY!==undefined)rig.position.y=rig.userData.baseY+2.8*t;
- if(secondReady)rig2.position.y=rig2.userData.baseY-2.8*(1-t);
- rig.visible=t<.98;rig2.visible=secondReady&&t>.02;
+ const transition=THREE.MathUtils.smoothstep(scrollProgress,0,1);
+ if(rig.userData.baseY!==undefined)rig.position.y=rig.userData.baseY+2.8*transition;
+ if(secondReady)rig2.position.y=rig2.userData.baseY-2.8*(1-transition);
+ rig.visible=transition<.98;rig2.visible=secondReady&&transition>.02;
  
  scrollHint.textContent=section===0?'SCROLL ↓ TO DISCOVER':'SCROLL ↑ TO RETURN';
  document.querySelector('.badge').textContent=section===0?'4 KEYS READY / 001':'4 KEYS READY / 002';
