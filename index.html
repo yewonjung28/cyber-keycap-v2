@@ -341,7 +341,7 @@ let held=null;
 // Play the user's recorded keycap sound; clone the audio for rapid repeated presses.
 const keycapSound=new Audio('./Keycap.mp3');
 keycapSound.preload='auto';
-keycapSound.volume=0.85;
+keycapSound.volume=0.68;
 function playKeyClick(){
  const source=section===0?keycapSound:section===1?secondSound:thirdSound;
  const sound=source.cloneNode();
