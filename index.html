@@ -84,6 +84,7 @@ window.addEventListener('gesturechange',e=>{
  gestureRotation=angle;
 },{passive:false});
 window.addEventListener('gestureend',e=>{e.preventDefault();gestureRotation=0;},{passive:false});
+let wheelAccum=0, wheelLast=0, wheelLockedUntil=0;
 window.addEventListener('wheel',e=>{
  if(orbitDrag)return;
  e.preventDefault();
@@ -96,7 +97,18 @@ window.addEventListener('wheel',e=>{
   camera.lookAt(orbitTarget);camera.updateMatrixWorld();
   return;
  }
- scrollGoal+=e.deltaY*.0025;
+ // One deliberate wheel/trackpad gesture advances exactly one key.
+ // Momentum events during the transition cannot stop between sections.
+ const now=performance.now();
+ if(now<wheelLockedUntil)return;
+ if(now-wheelLast>180||Math.sign(wheelAccum)!==Math.sign(e.deltaY))wheelAccum=0;
+ wheelLast=now;
+ wheelAccum+=e.deltaY*(e.deltaMode===1?16:e.deltaMode===2?innerHeight:1);
+ if(Math.abs(wheelAccum)>=55){
+  scrollGoal+=Math.sign(wheelAccum);
+  wheelAccum=0;
+  wheelLockedUntil=now+850;
+ }
 },{passive:false});
 const keys=[];const ray=new THREE.Raycaster(),pointer=new THREE.Vector2();
 let activePointer=null;
