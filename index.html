@@ -59,24 +59,15 @@ let section=0,scrollProgress=0,scrollGoal=0,secondReady=false;
 const secondKeys=[];
 const secondSound=new Audio('./Key2_Sound.mp3');secondSound.preload='auto';secondSound.volume=.9;
 const scrollHint=document.createElement('div');scrollHint.style.cssText='position:absolute;right:36px;bottom:32px;z-index:4;font:11px ui-monospace,monospace;letter-spacing:.08em;color:#a18c9b;pointer-events:none';scrollHint.textContent='SCROLL ↓ TO DISCOVER';document.body.appendChild(scrollHint);
-// Trackpad controls: ordinary vertical scroll switches sections; Shift + two-finger
-// scroll freely orbits in both axes. Native two-finger twist rolls the view.
+// Trackpad: horizontal two-finger movement or native rotate gesture rotates the camera.
+// Vertical two-finger scrolling continues to navigate between keycap sections.
 let gestureRotation=0;
-function orbitBy(dx,dy){
- if(!Number.isFinite(dx)||!Number.isFinite(dy))return;
+function rotateTrackpad(amount){
+ if(!Number.isFinite(amount)||!amount)return;
  orbitOffset.copy(camera.position).sub(orbitTarget);
- camera.updateMatrixWorld();
- orbitRight.setFromMatrixColumn(camera.matrixWorld,0).normalize();
- orbitQuat.setFromAxisAngle(orbitUp,-dx*.009);orbitOffset.applyQuaternion(orbitQuat);
- orbitQuat.setFromAxisAngle(orbitRight,-dy*.009);orbitOffset.applyQuaternion(orbitQuat);
+ orbitQuat.setFromAxisAngle(camera.getWorldDirection(orbitRight).normalize(),amount);
+ orbitOffset.applyQuaternion(orbitQuat);
  camera.position.copy(orbitTarget).add(orbitOffset);
- camera.lookAt(orbitTarget);
- camera.updateMatrixWorld();
-}
-function rollBy(angle){
- if(!Number.isFinite(angle)||!angle)return;
- camera.getWorldDirection(orbitRight).normalize();
- orbitQuat.setFromAxisAngle(orbitRight,angle);
  camera.up.applyQuaternion(orbitQuat);
  camera.lookAt(orbitTarget);
  camera.updateMatrixWorld();
@@ -85,21 +76,20 @@ window.addEventListener('gesturestart',e=>{e.preventDefault();gestureRotation=e.
 window.addEventListener('gesturechange',e=>{
  e.preventDefault();
  const angle=e.rotation||0;
- rollBy((angle-gestureRotation)*Math.PI/180);
+ rotateTrackpad((angle-gestureRotation)*Math.PI/180);
  gestureRotation=angle;
 },{passive:false});
 window.addEventListener('gestureend',e=>{e.preventDefault();gestureRotation=0;},{passive:false});
 window.addEventListener('wheel',e=>{
  if(orbitDrag)return;
  e.preventDefault();
- // Chrome doesn't expose trackpad finger positions for a two-finger twist.
- // Shift + two-finger scroll supplies independent horizontal/vertical orbit controls.
- if(e.shiftKey){
-  orbitBy(e.deltaX,e.deltaY);
-  return;
- }
- if(Math.abs(e.deltaX)>Math.abs(e.deltaY)*1.3&&Math.abs(e.deltaX)>.5){
-  orbitBy(e.deltaX,0);
+ if(Math.abs(e.deltaX)>Math.abs(e.deltaY)*1.3 && Math.abs(e.deltaX)>0.5){
+  // Chrome exposes horizontal trackpad motion as deltaX, not native rotation.
+  orbitOffset.copy(camera.position).sub(orbitTarget);
+  orbitQuat.setFromAxisAngle(orbitUp,-e.deltaX*.006);
+  orbitOffset.applyQuaternion(orbitQuat);
+  camera.position.copy(orbitTarget).add(orbitOffset);
+  camera.lookAt(orbitTarget);camera.updateMatrixWorld();
   return;
  }
  scrollGoal=THREE.MathUtils.clamp(scrollGoal+e.deltaY*.0025,0,1);
