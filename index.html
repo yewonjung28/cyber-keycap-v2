@@ -297,6 +297,11 @@ new GLTFLoader().load('./Key_Ver3.glb',g=>{
  // Prevent parent/child meshes from being treated as two independently pressed keys.
  const unique=candidates.filter(o=>!candidates.some(p=>p!==o&&o.parent===p));
  for(const key of unique){
+  const baseIndex=unique.indexOf(key)+1;
+  const base=root.getObjectByName('Base'+baseIndex);
+  const baseMesh=base?.getObjectByProperty('isMesh',true);
+  const baseMat=baseMesh?(Array.isArray(baseMesh.material)?baseMesh.material[0]:baseMesh.material):null;
+  const yellow=baseMat?.color?.clone()||new THREE.Color('#f4d54c');
   const emissive=[];
   key.traverse(o=>{
    if(!o.isMesh)return;
@@ -304,6 +309,26 @@ new GLTFLoader().load('./Key_Ver3.glb',g=>{
    const mats=Array.isArray(o.material)?o.material:[o.material];
    const copies=mats.map(m=>{
     const clone=m.clone();
+    if(clone.color){
+     clone.color.copy(yellow);
+     clone.roughness=.085;clone.metalness=0;clone.envMapIntensity=1.25;
+     if('clearcoat' in clone){clone.clearcoat=1;clone.clearcoatRoughness=.035;}
+    }
+    if(clone.map){
+     // PNG alpha represents lettering; keep the entire key surface yellow.
+     clone.transparent=false;clone.opacity=1;clone.alphaTest=0;
+     clone.onBeforeCompile=shader=>{
+      shader.fragmentShader=shader.fragmentShader.replace(
+       '#include <map_fragment>',
+       '#ifdef USE_MAP\n vec4 legendTexel = texture2D(map, vMapUv);\n diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.025), legendTexel.a);\n#endif'
+      );
+      shader.fragmentShader=shader.fragmentShader.replace(
+       '#include <emissivemap_fragment>',
+       '#include <emissivemap_fragment>\n totalEmissiveRadiance *= texture2D(map, vMapUv).a;'
+      );
+     };
+     clone.customProgramCacheKey=()=> 'third-yellow-solid-letter-mask-v1';
+    }
     if(clone.emissive){
      const isLegend=!!clone.map||/(legend|text|letter|esc|ctrl|key)/i.test(clone.name);
      if(isLegend){const intensity=Math.max(clone.emissiveIntensity||0,1.8);
