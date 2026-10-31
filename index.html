@@ -55,6 +55,9 @@ new RGBELoader().load('./studio.hdr',texture=>{texture.mapping=THREE.Equirectang
 
 const rig=new THREE.Group();scene.add(rig);
 const rig2=new THREE.Group();scene.add(rig2);rig2.visible=false;
+const rig3=new THREE.Group();scene.add(rig3);rig3.visible=false;
+let thirdReady=false;const thirdKeys=[];
+const thirdSound=new Audio('./Key_Ver3_.mp3');thirdSound.preload='auto';thirdSound.volume=.9;
 let section=0,scrollProgress=0,scrollGoal=0,secondReady=false;
 const secondKeys=[];
 const secondSound=new Audio('./Key2_Sound.mp3');secondSound.preload='auto';secondSound.volume=.9;
@@ -92,7 +95,7 @@ window.addEventListener('wheel',e=>{
   camera.lookAt(orbitTarget);camera.updateMatrixWorld();
   return;
  }
- scrollGoal=THREE.MathUtils.clamp(scrollGoal+e.deltaY*.0025,0,1);
+ scrollGoal=THREE.MathUtils.clamp(scrollGoal+e.deltaY*.0025,0,2);
 },{passive:false});
 const keys=[];const ray=new THREE.Raycaster(),pointer=new THREE.Vector2();
 let activePointer=null;
@@ -273,11 +276,63 @@ new GLTFLoader().load('./Thereisnoesc.glb',g=>{
  rig2.visible=false;
 },undefined,e=>{console.error('Second model load failed:',e);document.querySelector('.badge').textContent='SECOND MODEL LOAD ERROR';});
 
+// Third GLB: preserve its authored materials; identify keycaps and their bases
+// by Blender object names, with a mesh-based fallback for differently named exports.
+new GLTFLoader().load('./Key_Ver3.glb',g=>{
+ const root=g.scene;rig3.add(root);
+ const box=new THREE.Box3().setFromObject(root);
+ const size=box.getSize(new THREE.Vector3()),center=box.getCenter(new THREE.Vector3());
+ root.position.sub(center);
+ const scale=3.8/Math.max(size.x,size.z,0.001);
+ rig3.scale.setScalar(scale);
+ rig3.position.y=-box.min.y*scale+.08;
+ rig3.userData.baseY=rig3.position.y;
+ const allMeshes=[];
+ root.traverse(o=>{if(o.isMesh)allMeshes.push(o)});
+ const findNamed=(prefix,i)=>root.getObjectByName(prefix+i)||root.getObjectByName(prefix+' '+i)||root.getObjectByName(prefix+'.00'+i);
+ const namedKeys=[];
+ for(let i=1;i<=12;i++){const k=findNamed('Key',i);if(k)namedKeys.push(k)}
+ const fallback=allMeshes.filter(o=>!/(base|light|led|lamp|support|stem)/i.test(o.name));
+ const candidates=namedKeys.length?namedKeys:fallback;
+ // Prevent parent/child meshes from being treated as two independently pressed keys.
+ const unique=candidates.filter(o=>!candidates.some(p=>p!==o&&o.parent===p));
+ for(const key of unique){
+  const emissive=[];
+  key.traverse(o=>{
+   if(!o.isMesh)return;
+   o.castShadow=true;o.receiveShadow=true;
+   const mats=Array.isArray(o.material)?o.material:[o.material];
+   const copies=mats.map(m=>{
+    const clone=m.clone();
+    if(clone.emissive){
+     const isLegend=!!clone.map||/(legend|text|letter|esc|ctrl|key)/i.test(clone.name);
+     if(isLegend){const intensity=Math.max(clone.emissiveIntensity||0,1.8);
+      if(clone.emissive.getHex()===0)clone.emissive.set('#ffffff');
+      emissive.push({material:clone,intensity});
+     }
+     clone.emissiveIntensity=0;
+    }
+    return clone;
+   });
+   o.material=Array.isArray(o.material)?copies:copies[0];
+  });
+  const bounds=new THREE.Box3().setFromObject(key),mid=bounds.getCenter(new THREE.Vector3());
+  const lamp=new THREE.PointLight('#ffffff',0,Math.max(size.x,size.z)*.55,2);
+  lamp.position.set(mid.x,bounds.min.y-.015,mid.z);root.add(lamp);
+  thirdKeys.push({key,led:new THREE.Group(),lamp,emissive,leds:[],rest:key.position.y,press:0,target:0});
+ }
+ // Imported LED geometry must never be visible while keys are released.
+ root.traverse(o=>{if(/^(light|led|lamp)/i.test(o.name)){o.visible=false;}});
+ thirdReady=thirdKeys.length>0;
+ rig3.position.y=rig3.userData.baseY-2.8;rig3.visible=false;
+ if(!thirdReady)console.warn('Third GLB loaded, but no selectable keycap meshes found');
+},undefined,e=>{console.error('Third model load failed:',e);document.querySelector('.badge').textContent='THIRD MODEL LOAD ERROR';});
+
 function pick(e){
  const r=renderer.domElement.getBoundingClientRect();
  pointer.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);
  ray.setFromCamera(pointer,camera);
- const available=section===0?keys:secondKeys;
+ const available=section===0?keys:section===1?secondKeys:thirdKeys;
  const hits=ray.intersectObjects(available.map(k=>k.key),true);
  if(!hits.length)return null;
  return available.find(k=>{let o=hits[0].object;while(o){if(o===k.key)return true;o=o.parent;}return false})||null;
@@ -288,7 +343,7 @@ const keycapSound=new Audio('./Keycap.mp3');
 keycapSound.preload='auto';
 keycapSound.volume=0.85;
 function playKeyClick(){
- const source=section===0?keycapSound:secondSound;
+ const source=section===0?keycapSound:section===1?secondSound:thirdSound;
  const sound=source.cloneNode();
  sound.volume=source.volume;
  sound.play().catch(err=>console.warn('Keycap sound unavailable:',err));
@@ -302,7 +357,7 @@ function activateKey(k){
 }
 host.addEventListener('pointerdown',e=>{
  if(e.button!==0||e.shiftKey||orbitDrag)return;
- if(scrollProgress>.15&&scrollProgress<.85)return;
+ if(Math.abs(scrollProgress-Math.round(scrollProgress))>.15)return;
  const k=pick(e);
  if(!k)return;
  activePointer=e.pointerId;
@@ -325,7 +380,7 @@ host.addEventListener('pointerup',release);
 host.addEventListener('pointercancel',release);
 host.addEventListener('lostpointercapture',release);
 window.addEventListener('blur',()=>{
- for(const k of [...keys,...secondKeys])k.target=0;
+ for(const k of [...keys,...secondKeys,...thirdKeys])k.target=0;
  held=null;activePointer=null;orbitDrag=null;
 });
 
@@ -338,15 +393,18 @@ let previous=performance.now();
 function frame(t){
  const dt=Math.min((t-previous)/1000,.05);previous=t;
  scrollProgress+=(scrollGoal-scrollProgress)*(1-Math.exp(-dt*5));
- section=scrollProgress<.5?0:1;
- const transition=THREE.MathUtils.smoothstep(scrollProgress,0,1);
- if(rig.userData.baseY!==undefined)rig.position.y=rig.userData.baseY+2.8*transition;
- if(secondReady)rig2.position.y=rig2.userData.baseY-2.8*(1-transition);
- rig.visible=transition<.98;rig2.visible=secondReady&&transition>.02;
- 
- scrollHint.textContent=section===0?'SCROLL ↓ TO DISCOVER':'SCROLL ↑ TO RETURN';
- document.querySelector('.badge').textContent=section===0?'4 KEYS READY / 001':'4 KEYS READY / 002';
- for(const k of [...keys,...secondKeys]){
+ section=THREE.MathUtils.clamp(Math.round(scrollProgress),0,2);
+ const t01=THREE.MathUtils.smoothstep(scrollProgress,0,1);
+ const t12=THREE.MathUtils.smoothstep(scrollProgress,1,2);
+ if(rig.userData.baseY!==undefined)rig.position.y=rig.userData.baseY+2.8*t01;
+ if(secondReady)rig2.position.y=rig2.userData.baseY-2.8*(1-t01)+2.8*t12;
+ if(thirdReady)rig3.position.y=rig3.userData.baseY-2.8*(1-t12);
+ rig.visible=t01<.98;
+ rig2.visible=secondReady&&t01>.02&&t12<.98;
+ rig3.visible=thirdReady&&t12>.02;
+ scrollHint.textContent=section===0?'SCROLL ↓ TO DISCOVER':section===1?'SCROLL ↑ / ↓ TO SWITCH':'SCROLL ↑ TO RETURN';
+ document.querySelector('.badge').textContent='4 KEYS READY / 00'+(section+1);
+ for(const k of [...keys,...secondKeys,...thirdKeys]){
   k.press+=(k.target-k.press)*(1-Math.exp(-dt*(k.target?22:12)));
   k.key.position.y=k.rest-k.press*.10;
   const v=k.press;
