@@ -332,7 +332,7 @@ function pick(e){
  const r=renderer.domElement.getBoundingClientRect();
  pointer.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);
  ray.setFromCamera(pointer,camera);
- const available=section===0?keys:section===1?secondKeys:thirdKeys;
+ const available=[...keys,...secondKeys,...thirdKeys].filter(k=>k.key.visible&&k.key.parent?.visible&&k.key.parent.parent?.visible);
  const hits=ray.intersectObjects(available.map(k=>k.key),true);
  if(!hits.length)return null;
  return available.find(k=>{let o=hits[0].object;while(o){if(o===k.key)return true;o=o.parent;}return false})||null;
@@ -342,17 +342,18 @@ let held=null;
 const keycapSound=new Audio('./Keycap.mp3');
 keycapSound.preload='auto';
 keycapSound.volume=0.68;
-function playKeyClick(){
- const source=section===0?keycapSound:section===1?secondSound:thirdSound;
+function playKeyClick(k){
+ const soundSection=thirdKeys.includes(k)?2:secondKeys.includes(k)?1:0;
+ const source=soundSection===0?keycapSound:soundSection===1?secondSound:thirdSound;
  const sound=source.cloneNode();
  sound.volume=source.volume;
- if(section===1||section===2){
+ if(soundSection===1||soundSection===2){
   // Double the current effective volume of Key 2 and Key 3; leave Key 1 unchanged.
   try{
    const ctx=window.keySoundsAudioContext||(window.keySoundsAudioContext=new (window.AudioContext||window.webkitAudioContext)());
    if(ctx.state==='suspended')ctx.resume();
    const node=ctx.createMediaElementSource(sound);
-   const gain=ctx.createGain();gain.gain.value=section===1?4:4.5;
+   const gain=ctx.createGain();gain.gain.value=soundSection===1?4:4.5;
    node.connect(gain);gain.connect(ctx.destination);
    sound.addEventListener('ended',()=>{node.disconnect();gain.disconnect();},{once:true});
   }catch(err){console.warn('Key audio boost unavailable:',err);}
@@ -364,11 +365,10 @@ function activateKey(k){
  if(held===k)return;
  if(held)held.target=0;
  held=k;
- if(k){k.target=1;playKeyClick();}
+ if(k){k.target=1;playKeyClick(k);}
 }
 host.addEventListener('pointerdown',e=>{
  if(e.button!==0||e.shiftKey||orbitDrag)return;
- if(Math.abs(scrollProgress-Math.round(scrollProgress))>.15)return;
  const k=pick(e);
  if(!k)return;
  activePointer=e.pointerId;
