@@ -107,6 +107,9 @@ new GLTFLoader().load('./Four_keycaps.glb',g=>{
  for(let i=1;i<=4;i++){
   const key=root.getObjectByName('Key'+i),base=root.getObjectByName('Base'+i),led=root.getObjectByName('Light'+i);
   if(!key||!base||!led){console.warn('Missing components for key',i);continue}
+  const baseMesh=base.getObjectByProperty('isMesh',true);
+  const baseMaterial=baseMesh?(Array.isArray(baseMesh.material)?baseMesh.material[0]:baseMesh.material):null;
+  const matchingPink=baseMaterial?.color?.clone()||new THREE.Color('#ff35d5');
   const emissive=[];
   key.traverse(o=>{if(!o.isMesh)return;o.castShadow=true;o.receiveShadow=true;
    const original=Array.isArray(o.material)?o.material:[o.material];
@@ -155,7 +158,7 @@ new GLTFLoader().load('./Thereisnoesc.glb',g=>{
  const legends=['There','Is','No','esc'];
  for(let i=1;i<=4;i++){
   const key=root.getObjectByName('Key'+i),base=root.getObjectByName('Base'+i);
-  const led=root.getObjectByName('Light'+i)||root.getObjectByName('Light'+i+'_1');
+  const led=root.getObjectByName('Light'+i)||root.getObjectByName('Light'+i+'_1')||root.getObjectByName('Light'+i+'.1')||root.getObjectByName('Light'+i+'_2');
   if(!key||!base){console.warn('Second model missing key/base',i);continue;}
   const emissive=[];
   key.traverse(o=>{
@@ -165,7 +168,7 @@ new GLTFLoader().load('./Thereisnoesc.glb',g=>{
    const copies=mats.map(m=>{
     const clone=m.clone();
     if(clone.color){
-     clone.color.set('#f28bc4');
+     clone.color.copy(matchingPink);
      clone.roughness=.085;clone.metalness=0;clone.envMapIntensity=1.25;
      if('clearcoat' in clone){clone.clearcoat=1;clone.clearcoatRoughness=.035;}
     }
@@ -200,6 +203,113 @@ new GLTFLoader().load('./Thereisnoesc.glb',g=>{
    const copies=mats.map(m=>{const clone=m.clone();if('clearcoat' in clone){clone.clearcoat=1;clone.clearcoatRoughness=.025;clone.roughness=.065;clone.envMapIntensity=1.3;}return clone;});
    o.material=Array.isArray(o.material)?copies:copies[0];
   });
+  // Hide every exported LED mesh belonging to this key, including Blender's
+  // Light4.1 naming variant. Never show it at rest.
+  const ledCandidates=[...new Set([led,...root.children.filter(o=>new RegExp('^Light'+i+'(?:[._-].*)?(o=>{if(!o.isMesh)return;
+   o.material=Array.isArray(o.material)?o.material.map(m=>m.clone()):o.material.clone();
+   const mats=Array.isArray(o.material)?o.material:[o.material];
+   for(const m of mats){leds.push({material:m,intensity:Math.max(m.emissiveIntensity||0,2)});m.emissiveIntensity=0;m.transparent=true;m.opacity=0;}
+   o.visible=false;
+  });led.visible=false;}
+  const bounds=new THREE.Box3().setFromObject(key),mid=bounds.getCenter(new THREE.Vector3());
+  const lamp=new THREE.PointLight('#ff8cde',0,Math.max(size.x,size.z)*.55,2);
+  lamp.position.set(mid.x,bounds.min.y-.015,mid.z);root.add(lamp);
+  secondKeys.push({key,led:led||new THREE.Group(),lamp,emissive,leds,rest:key.position.y,press:0,target:0});
+ }
+ secondReady=true;
+ rig2.position.y=rig2.userData.baseY-2.8;
+ rig2.visible=false;
+},undefined,e=>{console.error('Second model load failed:',e);document.querySelector('.badge').textContent='SECOND MODEL LOAD ERROR';});
+
+function pick(e){
+ const r=renderer.domElement.getBoundingClientRect();
+ pointer.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);
+ ray.setFromCamera(pointer,camera);
+ const available=section===0?keys:secondKeys;
+ const hits=ray.intersectObjects(available.map(k=>k.key),true);
+ if(!hits.length)return null;
+ return available.find(k=>{let o=hits[0].object;while(o){if(o===k.key)return true;o=o.parent;}return false})||null;
+}
+let held=null;
+// Play the user's recorded keycap sound; clone the audio for rapid repeated presses.
+const keycapSound=new Audio('./Keycap.mp3');
+keycapSound.preload='auto';
+keycapSound.volume=0.85;
+function playKeyClick(){
+ const source=section===0?keycapSound:secondSound;
+ const sound=source.cloneNode();
+ sound.volume=source.volume;
+ sound.play().catch(err=>console.warn('Keycap sound unavailable:',err));
+}
+// Drag across keys to press them one after another while holding left mouse.
+function activateKey(k){
+ if(held===k)return;
+ if(held)held.target=0;
+ held=k;
+ if(k){k.target=1;playKeyClick();}
+}
+host.addEventListener('pointerdown',e=>{
+ if(e.button!==0||e.shiftKey||orbitDrag)return;
+ if(scrollProgress>.15&&scrollProgress<.85)return;
+ const k=pick(e);
+ if(!k)return;
+ activePointer=e.pointerId;
+ activateKey(k);
+ host.setPointerCapture(e.pointerId);
+});
+host.addEventListener('pointermove',e=>{
+ if(activePointer===null||e.pointerId!==activePointer||orbitDrag)return;
+ if((e.buttons&1)===0){release(e);return;}
+ // Passing through empty space releases the previous key; entering the next
+ // key plays its sound once and depresses it.
+ activateKey(pick(e));
+});
+function release(e){
+ if(activePointer===null||e.pointerId!==activePointer)return;
+ activateKey(null);
+ activePointer=null;
+}
+host.addEventListener('pointerup',release);
+host.addEventListener('pointercancel',release);
+host.addEventListener('lostpointercapture',release);
+window.addEventListener('blur',()=>{
+ for(const k of [...keys,...secondKeys])k.target=0;
+ held=null;activePointer=null;orbitDrag=null;
+});
+
+function resize(){
+ const w=innerWidth,h=innerHeight;
+ camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h);fitCameraToKeys();
+}
+window.addEventListener('resize',resize);resize();
+let previous=performance.now();
+function frame(t){
+ const dt=Math.min((t-previous)/1000,.05);previous=t;
+ scrollProgress+=(scrollGoal-scrollProgress)*(1-Math.exp(-dt*5));
+ section=scrollProgress<.5?0:1;
+ const transition=THREE.MathUtils.smoothstep(scrollProgress,0,1);
+ if(rig.userData.baseY!==undefined)rig.position.y=rig.userData.baseY+2.8*transition;
+ if(secondReady)rig2.position.y=rig2.userData.baseY-2.8*(1-transition);
+ rig.visible=transition<.98;rig2.visible=secondReady&&transition>.02;
+ 
+ scrollHint.textContent=section===0?'SCROLL ↓ TO DISCOVER':'SCROLL ↑ TO RETURN';
+ document.querySelector('.badge').textContent=section===0?'4 KEYS READY / 001':'4 KEYS READY / 002';
+ for(const k of [...keys,...secondKeys]){
+  k.press+=(k.target-k.press)*(1-Math.exp(-dt*(k.target?22:12)));
+  k.key.position.y=k.rest-k.press*.10;
+  const v=k.press;
+  k.led.visible=v>.015;
+  k.led.traverse(o=>{if(o.isMesh)o.visible=v>.015});
+  for(const m of k.leds){m.material.emissiveIntensity=m.intensity*v;m.material.opacity=v;}
+  for(const m of k.emissive)m.material.emissiveIntensity=m.intensity*v;
+  k.lamp.intensity=4*v;
+ }
+ renderer.render(scene,camera);requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script></body></html>
+,'i').test(o.name))].filter(Boolean))];
+  for(const candidate of ledCandidates)candidate.visible=false;
   const leds=[];
   if(led){led.traverse(o=>{if(!o.isMesh)return;
    o.material=Array.isArray(o.material)?o.material.map(m=>m.clone()):o.material.clone();
