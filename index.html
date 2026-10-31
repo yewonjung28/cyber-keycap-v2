@@ -95,7 +95,7 @@ window.addEventListener('wheel',e=>{
   camera.lookAt(orbitTarget);camera.updateMatrixWorld();
   return;
  }
- scrollGoal=THREE.MathUtils.clamp(scrollGoal+e.deltaY*.0025,0,2);
+ scrollGoal+=e.deltaY*.0025;
 },{passive:false});
 const keys=[];const ray=new THREE.Raycaster(),pointer=new THREE.Vector2();
 let activePointer=null;
@@ -429,16 +429,19 @@ let previous=performance.now();
 function frame(t){
  const dt=Math.min((t-previous)/1000,.05);previous=t;
  scrollProgress+=(scrollGoal-scrollProgress)*(1-Math.exp(-dt*5));
- section=THREE.MathUtils.clamp(Math.round(scrollProgress),0,2);
- const t01=THREE.MathUtils.smoothstep(scrollProgress,0,1);
- const t12=THREE.MathUtils.smoothstep(scrollProgress,1,2);
- if(rig.userData.baseY!==undefined)rig.position.y=rig.userData.baseY+2.8*t01;
- if(secondReady)rig2.position.y=rig2.userData.baseY-2.8*(1-t01)+2.8*t12;
- if(thirdReady)rig3.position.y=rig3.userData.baseY-2.8*(1-t12);
- rig.visible=t01<.98;
- rig2.visible=secondReady&&t01>.02&&t12<.98;
- rig3.visible=thirdReady&&t12>.02;
- scrollHint.textContent=section===0?'SCROLL ↓ TO DISCOVER':section===1?'SCROLL ↑ / ↓ TO SWITCH':'SCROLL ↑ TO RETURN';
+ // Cycle seamlessly in either direction: 1 → 2 → 3 → 1, or reverse.
+ section=((Math.round(scrollProgress)%3)+3)%3;
+ function placeCyclic(model,index,ready){
+  if(!ready){model.visible=false;return;}
+  const occurrence=index+3*Math.round((scrollProgress-index)/3);
+  const offset=scrollProgress-occurrence;
+  model.position.y=model.userData.baseY+2.8*offset;
+  model.visible=Math.abs(offset)<.985;
+ }
+ placeCyclic(rig,0,rig.userData.baseY!==undefined);
+ placeCyclic(rig2,1,secondReady);
+ placeCyclic(rig3,2,thirdReady);
+ scrollHint.textContent='SCROLL ↑ / ↓ TO LOOP';
  document.querySelector('.badge').textContent='4 KEYS READY / 00'+(section+1);
  for(const k of [...keys,...secondKeys,...thirdKeys]){
   k.press+=(k.target-k.press)*(1-Math.exp(-dt*(k.target?22:12)));
