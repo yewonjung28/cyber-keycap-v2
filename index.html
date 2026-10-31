@@ -57,7 +57,7 @@ const rig=new THREE.Group();scene.add(rig);
 const rig2=new THREE.Group();scene.add(rig2);rig2.visible=false;
 let section=0,scrollProgress=0,scrollGoal=0,secondReady=false;
 const secondKeys=[];
-const secondSound=new Audio('./dragon-studio-pop-402324.mp3');secondSound.preload='auto';secondSound.volume=.9;
+const secondSound=new Audio('./Key2_Sound.mp3');secondSound.preload='auto';secondSound.volume=.9;
 const scrollHint=document.createElement('div');scrollHint.style.cssText='position:absolute;right:36px;bottom:32px;z-index:4;font:11px ui-monospace,monospace;letter-spacing:.08em;color:#a18c9b;pointer-events:none';scrollHint.textContent='SCROLL ↓ TO DISCOVER';document.body.appendChild(scrollHint);
 window.addEventListener('wheel',e=>{if(orbitDrag)return;e.preventDefault();scrollGoal=THREE.MathUtils.clamp(scrollGoal+e.deltaY*.0025,0,1);},{passive:false});
 const keys=[];const ray=new THREE.Raycaster(),pointer=new THREE.Vector2();
