@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Extract audio to MP3
         run: ffmpeg -y -i Key2_Sound.mov -vn -codec:a libmp3lame -qscale:a 3 Key2_Sound.mp3
       - name: Commit extracted audio
