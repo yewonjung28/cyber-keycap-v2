@@ -180,11 +180,11 @@ new GLTFLoader().load('./Thereisnoesc.glb',g=>{
       clone.onBeforeCompile=shader=>{
        shader.fragmentShader=shader.fragmentShader.replace(
         '#include <map_fragment>',
-        '#ifdef USE_MAP\\n float legendAlpha = texture2D(map, vMapUv).a;\\n diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.025), legendAlpha);\\n#endif'
+        '#ifdef USE_MAP\n vec4 legendTexel = texture2D(map, vMapUv);\n diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.025), legendTexel.a);\n#endif'
        );
        shader.fragmentShader=shader.fragmentShader.replace(
         '#include <emissivemap_fragment>',
-        '#include <emissivemap_fragment>\\n totalEmissiveRadiance *= texture2D(map, vMapUv).a;'
+        '#include <emissivemap_fragment>\n totalEmissiveRadiance *= texture2D(map, vMapUv).a;'
        );
       };
       clone.customProgramCacheKey=()=> 'second-pink-solid-letter-mask-v2';
