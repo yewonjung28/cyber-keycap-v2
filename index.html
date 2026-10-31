@@ -164,14 +164,30 @@ new GLTFLoader().load('./Thereisnoesc.glb',g=>{
    const mats=Array.isArray(o.material)?o.material:[o.material];
    const copies=mats.map(m=>{
     const clone=m.clone();
-    if(clone.color){clone.roughness=.085;clone.metalness=0;clone.envMapIntensity=1.25;
-     if('clearcoat' in clone){clone.clearcoat=1;clone.clearcoatRoughness=.035;}}
-    if(clone.emissive&& (legends.some(n=>clone.name.toLowerCase()===n.toLowerCase())||clone.map)){
+    if(clone.color){
+     clone.color.set('#f28bc4');
+     clone.roughness=.085;clone.metalness=0;clone.envMapIntensity=1.25;
+     if('clearcoat' in clone){clone.clearcoat=1;clone.clearcoatRoughness=.035;}
+    }
+    const isLegend=legends.some(n=>clone.name.toLowerCase()===n.toLowerCase())||!!clone.map;
+    if(clone.emissive&&isLegend){
      const strength=Math.max(clone.emissiveIntensity||0,2);
      clone.emissive.set('#ffffff');clone.emissiveIntensity=0;
      if(clone.map){
-      clone.onBeforeCompile=shader=>{shader.fragmentShader=shader.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\n totalEmissiveRadiance *= texture2D(map, vMapUv).a;');};
-      clone.customProgramCacheKey=()=> 'second-legend-alpha-v1';
+      // PNG alpha is a LETTER MASK, not the color of the keycap surface.
+      // Preserve the solid pink surface and draw dark legends only where alpha exists.
+      clone.transparent=false;clone.opacity=1;clone.alphaTest=0;
+      clone.onBeforeCompile=shader=>{
+       shader.fragmentShader=shader.fragmentShader.replace(
+        '#include <map_fragment>',
+        '#ifdef USE_MAP\\n float legendAlpha = texture2D(map, vMapUv).a;\\n diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.025), legendAlpha);\\n#endif'
+       );
+       shader.fragmentShader=shader.fragmentShader.replace(
+        '#include <emissivemap_fragment>',
+        '#include <emissivemap_fragment>\\n totalEmissiveRadiance *= texture2D(map, vMapUv).a;'
+       );
+      };
+      clone.customProgramCacheKey=()=> 'second-pink-solid-letter-mask-v2';
      }
      emissive.push({material:clone,intensity:strength});
     }
