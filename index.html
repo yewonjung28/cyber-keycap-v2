@@ -346,6 +346,17 @@ function playKeyClick(){
  const source=section===0?keycapSound:section===1?secondSound:thirdSound;
  const sound=source.cloneNode();
  sound.volume=source.volume;
+ if(section===2){
+  // Web Audio gain permits a true +50% boost beyond HTMLAudioElement's 1.0 cap.
+  try{
+   const ctx=window.key3AudioContext||(window.key3AudioContext=new (window.AudioContext||window.webkitAudioContext)());
+   if(ctx.state==='suspended')ctx.resume();
+   const node=ctx.createMediaElementSource(sound);
+   const gain=ctx.createGain();gain.gain.value=1.5;
+   node.connect(gain);gain.connect(ctx.destination);
+   sound.addEventListener('ended',()=>{node.disconnect();gain.disconnect();},{once:true});
+  }catch(err){console.warn('Key 3 audio boost unavailable:',err);}
+ }
  sound.play().catch(err=>console.warn('Keycap sound unavailable:',err));
 }
 // Drag across keys to press them one after another while holding left mouse.
