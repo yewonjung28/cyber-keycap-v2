@@ -160,6 +160,10 @@ new GLTFLoader().load('./Thereisnoesc.glb',g=>{
   const key=root.getObjectByName('Key'+i),base=root.getObjectByName('Base'+i);
   const led=root.getObjectByName('Light'+i)||root.getObjectByName('Light'+i+'_1')||root.getObjectByName('Light'+i+'.1')||root.getObjectByName('Light'+i+'_2');
   if(!key||!base){console.warn('Second model missing key/base',i);continue;}
+  // Match this keycap to its own pink base (not the first model's scope).
+  const baseMesh=base.getObjectByProperty('isMesh',true);
+  const baseMaterial=baseMesh?(Array.isArray(baseMesh.material)?baseMesh.material[0]:baseMesh.material):null;
+  const matchingPink=baseMaterial?.color?.clone()||new THREE.Color('#ff35d5');
   const emissive=[];
   key.traverse(o=>{
    if(!o.isMesh)return;
