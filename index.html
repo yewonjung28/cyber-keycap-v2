@@ -203,18 +203,32 @@ new GLTFLoader().load('./Thereisnoesc.glb',g=>{
    const copies=mats.map(m=>{const clone=m.clone();if('clearcoat' in clone){clone.clearcoat=1;clone.clearcoatRoughness=.025;clone.roughness=.065;clone.envMapIntensity=1.3;}return clone;});
    o.material=Array.isArray(o.material)?copies:copies[0];
   });
-  // Hide every exported LED mesh belonging to this key, including Blender's
-  // Light4.1 naming variant. Never show it at rest.
-  const ledCandidates=[...new Set([led,...root.children.filter(o=>new RegExp('^Light'+i+'(?:[._-].*)?(o=>{if(!o.isMesh)return;
-   o.material=Array.isArray(o.material)?o.material.map(m=>m.clone()):o.material.clone();
-   const mats=Array.isArray(o.material)?o.material:[o.material];
-   for(const m of mats){leds.push({material:m,intensity:Math.max(m.emissiveIntensity||0,2)});m.emissiveIntensity=0;m.transparent=true;m.opacity=0;}
-   o.visible=false;
-  });led.visible=false;}
+  // Include Blender's alternate fourth-light naming and hide unused LED meshes.
+  const ledCandidates=[];
+  root.traverse(o=>{
+   if(o.name===('Light'+i)||o.name.startsWith('Light'+i+'.')||o.name.startsWith('Light'+i+'_')){
+    ledCandidates.push(o);
+   }
+  });
+  const leds=[];
+  for(const candidate of ledCandidates){
+   candidate.traverse(o=>{
+    if(!o.isMesh)return;
+    o.material=Array.isArray(o.material)?o.material.map(m=>m.clone()):o.material.clone();
+    const mats=Array.isArray(o.material)?o.material:[o.material];
+    for(const m of mats){
+     leds.push({material:m,intensity:Math.max(m.emissiveIntensity||0,2)});
+     m.emissiveIntensity=0;m.transparent=true;m.opacity=0;
+    }
+    o.visible=false;
+   });
+   candidate.visible=false;
+  }
+  const activeLed=ledCandidates[0]||new THREE.Group();
   const bounds=new THREE.Box3().setFromObject(key),mid=bounds.getCenter(new THREE.Vector3());
   const lamp=new THREE.PointLight('#ff8cde',0,Math.max(size.x,size.z)*.55,2);
   lamp.position.set(mid.x,bounds.min.y-.015,mid.z);root.add(lamp);
-  secondKeys.push({key,led:led||new THREE.Group(),lamp,emissive,leds,rest:key.position.y,press:0,target:0});
+  secondKeys.push({key,led:activeLed,lamp,emissive,leds,rest:key.position.y,press:0,target:0});
  }
  secondReady=true;
  rig2.position.y=rig2.userData.baseY-2.8;
